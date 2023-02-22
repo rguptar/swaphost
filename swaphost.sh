@@ -3,7 +3,7 @@
 source ./semver2.sh
 
 function usage {
-    echo "Usage: $0 -g <resource group> -n <cluster name> -m <mode> -s <new vm sku> -a <old nodepool> -b <new nodepool>"
+    echo "Usage: $0 -g <resource group> -n <cluster name> -m <mode> [-p <priority>] -s <new vm sku> -a <old nodepool> -b <new nodepool>"
     exit
 }
 
@@ -21,7 +21,8 @@ oldNodepool=
 newNodepool=
 newVmSku=
 mode=
-args=$(getopt ha:b:g:m:n:s: $*)
+priority=Regular
+args=$(getopt ha:b:g:m:n:p:s: $*)
 set -- $args
 for i; do
     case "$i" in
@@ -59,6 +60,11 @@ for i; do
         shift
         shift
         ;;
+    -p)
+        priority=$2
+        shift
+        shift
+        ;;
     --)
         shift
         break
@@ -83,6 +89,12 @@ function invalid() {
 if [ "$mode" != "System" ] && [ "$mode" != "User" ]; then
     invalid "invalid mode $mode"
 fi
+valid "valid mode $mode"
+
+if [ "$priority" != "Regular" ] && [ "$priority" != "Spot" ]; then
+    invalid "invalid priority $priority"
+fi
+valid "valid priority $priority"
 
 # todo: add --no-validate flag
 oldNodepoolExists=0
@@ -140,7 +152,7 @@ oldNodepoolObject=$(az aks nodepool show --cluster-name $cluster -n $oldNodepool
 minCount=$(echo $oldNodepoolObject | jq .minCount)
 maxCount=$(echo $oldNodepoolObject | jq .maxCount)
 echo "creating nodepool managedClusters/$cluster/agentPools/$newNodepool"
-az aks nodepool add --cluster-name $cluster -n $newNodepool -g $rg --node-count $oldNodeCount --node-vm-size $newVmSku --mode $mode
+az aks nodepool add --cluster-name $cluster -n $newNodepool -g $rg --node-count $oldNodeCount --node-vm-size $newVmSku --mode $mode --priority $priority
 az aks nodepool update --cluster-name $cluster -n $newNodepool -g $rg --enable-cluster-autoscaler --min-count $minCount --max-count $maxCount
 
 echo "starting cordon + drain"
@@ -152,6 +164,6 @@ for node in $(get_json_array "$oldNodes" ".[]"); do
 done
 
 echo "deleting old nodepool"
-az aks nodepool delete --cluster-name $cluster -n $newNodepool -g $rg
+az aks nodepool delete --cluster-name $cluster -n $oldNodepool -g $rg
 
 valid "swaphost complete"

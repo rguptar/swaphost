@@ -11,6 +11,7 @@ This script automates it:
 Usage: ./swaphost.sh -g <resource group> \
                      -n <cluster name> \
                      -m <mode> \
+                     -p <priority> \
                      -s <new vm sku> \
                      -a <old nodepool> \
                      -b <new nodepool>
