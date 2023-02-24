@@ -94,6 +94,7 @@ valid "valid mode $mode"
 if [ "$priority" != "Regular" ] && [ "$priority" != "Spot" ]; then
     invalid "invalid priority $priority"
 fi
+# todo: mark System + Spot combo as invalid
 valid "valid priority $priority"
 
 # todo: add --no-validate flag
@@ -115,6 +116,8 @@ if [ $oldNodepoolExists -eq 0 ]; then
     invalid "old nodepool does not exist"
 fi
 valid "new nodepool does not exist"
+# todo: add support for same name
+
 if [ "$oldNodepoolMode" != "$mode" ]; then
     invalid "old nodepool mode $oldNodepoolMode does not match new nodepool mode $mode"
 fi
@@ -151,6 +154,7 @@ oldNodeCount=$(echo $oldNodes | jq "length")
 oldNodepoolObject=$(az aks nodepool show --cluster-name $cluster -n $oldNodepool -g $rg -o json | jq)
 minCount=$(echo $oldNodepoolObject | jq .minCount)
 maxCount=$(echo $oldNodepoolObject | jq .maxCount)
+# todo: handle null min, max
 echo "creating nodepool managedClusters/$cluster/agentPools/$newNodepool"
 az aks nodepool add --cluster-name $cluster -n $newNodepool -g $rg --node-count $oldNodeCount --node-vm-size $newVmSku --mode $mode --priority $priority
 az aks nodepool update --cluster-name $cluster -n $newNodepool -g $rg --enable-cluster-autoscaler --min-count $minCount --max-count $maxCount
