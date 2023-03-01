@@ -167,9 +167,17 @@ oldNodeCount=$(echo $oldNodes | jq "length")
 oldNodepoolObject=$(az aks nodepool show --cluster-name $cluster -n $oldNodepool -g $rg -o json | jq)
 minCount=$(echo $oldNodepoolObject | jq .minCount)
 maxCount=$(echo $oldNodepoolObject | jq .maxCount)
-# todo: handle null min, max
+if [ -z "$minCount" ] || [ "$minCount" == "null" ]; then
+    echo "minCount is not set on old nodepool, setting to 1"
+    minCount=1
+fi
+if [ -z "$maxCount" ] || [ "$maxCount" == "null" ]; then
+    echo "maxCount is not set on old nodepool, setting to 40"
+    maxCount=40
+fi
 echo "creating nodepool managedClusters/$cluster/agentPools/$newNodepool"
 az aks nodepool add --cluster-name $cluster -n $newNodepool -g $rg --node-count $oldNodeCount --node-vm-size $newVmSku --mode $mode --priority $priority
+# todo: if min, max not set, then do not set cluster autoscaler
 az aks nodepool update --cluster-name $cluster -n $newNodepool -g $rg --enable-cluster-autoscaler --min-count $minCount --max-count $maxCount
 
 echo "starting cordon + drain"
