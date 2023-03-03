@@ -162,24 +162,27 @@ if [ $skipValidation -eq 0 ]; then
     valid "pdb found"
 fi
 
-oldNodes=$(kubectl get nodes -o json | jq ".items[] | select(.metadata.labels.agentpool==\"$oldNodepool\") | {agentpool: .metadata.labels.agentpool, name: .metadata.name}" | jq -s)
-oldNodeCount=$(echo $oldNodes | jq "length")
-oldNodepoolObject=$(az aks nodepool show --cluster-name $cluster -n $oldNodepool -g $rg -o json | jq)
-minCount=$(echo $oldNodepoolObject | jq .minCount)
-maxCount=$(echo $oldNodepoolObject | jq .maxCount)
-if [ -z "$minCount" ] || [ "$minCount" == "null" ]; then
-    echo "minCount is not set on old nodepool, setting to 1"
-    minCount=1
-fi
-if [ -z "$maxCount" ] || [ "$maxCount" == "null" ]; then
-    echo "maxCount is not set on old nodepool, setting to 40"
-    maxCount=40
-fi
-echo "creating nodepool managedClusters/$cluster/agentPools/$newNodepool"
-az aks nodepool add --cluster-name $cluster -n $newNodepool -g $rg --node-count $oldNodeCount --node-vm-size $newVmSku --mode $mode --priority $priority
-# todo: if min, max not set, then do not set cluster autoscaler
-az aks nodepool update --cluster-name $cluster -n $newNodepool -g $rg --enable-cluster-autoscaler --min-count $minCount --max-count $maxCount
+sub=$(az account show --query id -o tsv)
+az group export \
+    --name $rg \
+    --resource-ids /subscriptions/$sub/resourcegroups/$rg/providers/Microsoft.ContainerService/managedClusters/$cluster \
+    --skip-all-params | jq ".resources[] | select(.name == \"$cluster/$oldNodepool\")" | jq 'del(.dependsOn)' > nodepool.json
+tmp=$(mktemp)
+jq ".properties.vmSize = \"$newVmSku\"" nodepool.json > $tmp
+jq ".name = \"$newNodepool\"" $tmp > nodepool.json && rm $tmp
+tee nodepool.template.json > /dev/null <<EOF
+{
+  "\$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {},
+  "resources": [
+    $(cat nodepool.json)
+  ]
+}
+EOF
+az deployment group create -g $rg  --template-file ./nodepool.template.json
 
+oldNodes=$(kubectl get nodes -o json | jq ".items[] | select(.metadata.labels.agentpool==\"$oldNodepool\") | {agentpool: .metadata.labels.agentpool, name: .metadata.name}" | jq -s)
 echo "starting cordon + drain"
 for node in $(get_json_array "$oldNodes" ".[]"); do
     name=$(echo $(get_json_array "$node" ".name"))
