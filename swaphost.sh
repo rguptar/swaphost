@@ -107,7 +107,9 @@ if [ $skipValidation -eq 0 ]; then
     if [ "$priority" != "Regular" ] && [ "$priority" != "Spot" ]; then
         invalid "invalid priority $priority"
     fi
-    # todo: mark System + Spot combo as invalid
+    if [ "$mode" == "System" ] && [ "$priority" == "Spot" ]; then
+        invalid "invalid mode, priority combination $mode, $priority"
+    fi
     valid "valid priority $priority"
 
     oldNodepoolExists=0
