@@ -152,7 +152,7 @@ if [ $skipValidation -eq 0 ]; then
     valid "pdb supported"
 
     # todo: filter pdb by workloads running on the specified old nodepool
-    az aks get-credentials -g $rg -n $cluster
+    az aks get-credentials -g $rg -n $cluster --admin
     pdbs=$(kubectl get pdb -A -o json | jq)
     for pdb in $(get_json_array "$pdbs" ".items[]"); do
         name=$(get_json_value "$pdb" '.metadata.name')
@@ -169,9 +169,11 @@ az group export \
     --name $rg \
     --resource-ids /subscriptions/$sub/resourcegroups/$rg/providers/Microsoft.ContainerService/managedClusters/$cluster \
     --skip-all-params | jq ".resources[] | select(.name == \"$cluster/$oldNodepool\")" | jq 'del(.dependsOn)' > nodepool.json
-tmp=$(mktemp)
-jq ".properties.vmSize = \"$newVmSku\"" nodepool.json > $tmp
-jq ".name = \"$newNodepool\"" $tmp > nodepool.json && rm $tmp
+if [ -s nodepool.json ]; then
+tmpfile=tmp.nodepool.json
+jq ".properties.vmSize = \"$newVmSku\"" nodepool.json > $tmpfile
+jq ".name = \"$cluster/$newNodepool\"" $tmpfile > nodepool.json
+valid "detached nodepool"
 tee nodepool.template.json > /dev/null <<EOF
 {
   "\$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
@@ -182,7 +184,36 @@ tee nodepool.template.json > /dev/null <<EOF
   ]
 }
 EOF
-az deployment group create -g $rg  --template-file ./nodepool.template.json
+else
+valid "attached nodepool"
+az group export \
+    --name $rg \
+    --resource-ids /subscriptions/$sub/resourcegroups/$rg/providers/Microsoft.ContainerService/managedClusters/$cluster \
+    --skip-all-params \
+    | jq ".resources[] | select(.name == \"$cluster\")" \
+    | jq ".properties.agentPoolProfiles[] | select(.name == \"$oldNodepool\")" \
+    | jq 'del(.properties)' > nodepool_properties.json
+tmpfile=tmp.nodepool_properties.json
+jq ".vmSize = \"$newVmSku\"" nodepool_properties.json > $tmpfile
+jq ".name = \"$newNodepool\"" $tmpfile > nodepool_properties.json 
+tee nodepool.template.json > /dev/null <<EOF
+{
+  "\$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {},
+  "resources": [
+    {
+        "type": "Microsoft.ContainerService/managedClusters/agentPools",
+        "apiVersion": "2023-01-02-preview+",
+        "name": "$cluster/$newNodepool",
+        "properties": $(cat nodepool_properties.json)
+    }
+  ]
+}
+EOF
+fi
+cat ./nodepool.template.json
+az deployment group create -g $rg --template-file ./nodepool.template.json
 
 oldNodes=$(kubectl get nodes -o json | jq ".items[] | select(.metadata.labels.agentpool==\"$oldNodepool\") | {agentpool: .metadata.labels.agentpool, name: .metadata.name}" | jq -s)
 echo "starting cordon + drain"

@@ -1,0 +1,24 @@
+name: CI
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  AZURE_USER: ${{ secrets.AZURE_USER }}
+  AZURE_PASSWORD: ${{ secrets.AZURE_PASSWORD }}
+  AZURE_TENANT: ${{ secrets.AZURE_TENANT }}
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: azure/setup-kubectl@v3
+        id: install
+      - name: Run script file
+        run: |
+          ./ci.sh
+        shell: bash
