@@ -1,3 +1,5 @@
+[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/rguptar/swaphost/badge)](https://api.securityscorecards.dev/projects/github.com/rguptar/swaphost)
+
 # swaphost
 
 Changing the nodepool SKU for an Azure Kubernetes Service cluster is a multi-step process.
